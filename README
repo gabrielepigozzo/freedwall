@@ -1,9 +1,6 @@
-#############################################################################
-# About:								    # 
-#############################################################################
 
 Hardening your Linux box with a firewall isn't that easy even for experts.
-FREEDWALL is just this, an iptables rules generator meant to be easy to configure and deploy.
+FREEDWALL is just this: an iptables rules generator meant to be easy to configure and deploy.
 
 
 #############################################################################
@@ -26,4 +23,4 @@ FREEDWALL is just this, an iptables rules generator meant to be easy to configur
 
 #############################################################################
 
-Gabriele Pigozzo (gabriele.pigozzo@gmail.com)
+
