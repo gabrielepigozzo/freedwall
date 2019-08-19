@@ -1,0 +1,15 @@
+#! /bin/sh -e
+
+action="$1"
+version="$2"
+
+case $action in
+	install)
+		;;
+	upgrade)
+		/etc/init.d/freedwall reload
+		;;
+esac
+
+
+exit 0

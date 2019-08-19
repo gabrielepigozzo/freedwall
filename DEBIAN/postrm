@@ -1,0 +1,18 @@
+#!/bin/sh -e
+
+# Automatically added by dh_installdebconf
+if [ "$1" = purge ] && [ -e /usr/share/debconf/confmodule ]; then
+	. /usr/share/debconf/confmodule
+	db_purge
+fi
+
+case "$1" in
+	abort-install|abort-upgrade)
+		;;
+	purge)
+		;;
+esac
+
+
+exit 0
+

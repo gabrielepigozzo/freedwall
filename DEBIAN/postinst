@@ -1,0 +1,22 @@
+#!/bin/sh -e
+
+action="$1"
+oldversion="$2"
+
+. /usr/share/debconf/confmodule
+db_version 2.0
+
+umask 022
+
+if [ "$action" != configure ]
+  then
+    exit 0
+fi
+
+
+update-rc.d freedwall defaults
+
+
+db_stop
+
+exit 0

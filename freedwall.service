@@ -1,0 +1,17 @@
+[Unit]
+Description=iptables rules generator
+After=NetworkManager-wait-online.service
+
+[Service]
+#EnvironmentFile=/etc/freedwall.conf
+ExecStart=/usr/sbin/freedwall start
+ExecReload=/usr/sbin/freedwall reload
+ExecStop=/usr/sbin/freedwall stop
+Type=oneshot
+RemainAfterExit=yes
+#Restart=on-failure
+#RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+Alias=freedwall.service

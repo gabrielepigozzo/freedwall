@@ -1,0 +1,29 @@
+#############################################################################
+# About:								    # 
+#############################################################################
+
+Hardening your Linux box with a firewall isn't that easy even for experts.
+FREEDWALL is just this, an iptables rules generator meant to be easy to configure and deploy.
+
+
+#############################################################################
+# Features: 								    #
+#############################################################################
+
+    * System V compliant start/stop method
+    * 3 configuration zones: LOCALHOST, LOCALNET, WORLD
+    * protection against Xmas, Null & FIN Scan
+    * block remote uptime discovery
+    * masquerading autodetection
+    * system hardening through sysctl directives
+    * TCP/UDP port forwarding
+    * ICMP filtering
+    * IPV6 filtering
+    * host/port based Blacklists & Whitelists
+    * load/unload iptables modules
+    * GRSEC patch support
+    * White/Black lists
+
+#############################################################################
+
+Gabriele Pigozzo (gabriele.pigozzo@gmail.com)

@@ -1,0 +1,848 @@
+#!/bin/bash
+#set -e
+VERSION="3.5.0"
+
+### BEGIN INIT INFO
+# Provides:        freedwall
+# Required-Start:  $network $remote_fs $syslog
+# Required-Stop:   $network $remote_fs $syslog
+# Default-Start:   2 3 4 5
+# Default-Stop:    1
+# Short-Description: Load iptables ruleset
+### END INIT INFO
+
+
+
+CONF=/etc/freedwall.conf
+PATH=/bin:/usr/bin:/sbin:/usr/sbin
+
+
+
+#############
+# Functions #
+#############################################################################
+
+error() {
+
+        local MSG=$1
+
+        $ECHO -e "${MSG} Aborting."
+        caller 0
+
+        exit 1
+}
+
+
+is_a_number() {
+
+        local NUMBER=$1
+
+        [ -z $NUMBER ] && return
+
+        if [ -z $(echo $NUMBER | grep -e [^[:digit:]]) ]; then
+                echo 1
+        fi
+}
+
+
+rcode_mgr() {
+
+        if [ $? -ne 0 ]; then
+                local MSG=$1
+
+                $ECHO "$MSG fallito. Aborting."
+                caller 0
+
+                exit 1
+        fi
+}
+
+
+look_4_binaries()
+{
+        APP_LIST="$*"
+
+
+        ECHO=$(which echo)
+        [ "$ECHO" ] || ECHO="echo"
+        
+        TR=$(which tr)
+        [ "$TR" ] || error "tr not found."
+
+        
+        for bin in $APP_LIST; do
+
+                VAR_NAME=$($ECHO $bin | $TR a-z A-Z)
+
+                export $($ECHO $VAR_NAME)=$(which $bin)
+
+
+                if [ -z "$(eval $ECHO \$$VAR_NAME)" ] ; then
+                        error "$bin not found!"
+                fi
+        done
+}
+
+
+
+################################
+# looking for needed utilities #
+#############################################################################
+
+look_4_binaries	awk \
+		cut \
+		grep \
+		head \
+		ip \
+		lsmod \
+		sed \
+		sysctl \
+		tail 
+
+IPTB=$(which iptables | $HEAD -n 1)
+[ "$IPTB" ] || error "iptables not found."
+
+
+
+#############################################################################
+
+
+
+case "$1" in
+start)
+	
+	[ -f $CONF ] || error "$CONF not found."
+	. $CONF
+	
+	
+	# determina la versione del kernel
+	KERN_MAJ_VER=$(uname -r | $CUT -d. -f1)
+	KERN_MIN_VER=$(uname -r | $CUT -d. -f2)
+	rcode_mgr "uname -r | $SED -e 's/^.\.// ; s/\..*//' failed."
+	[ "$KERN_MAJ_VER" ] || error "KERN_MAJ_VER has no value."
+	[ "$KERN_MIN_VER" ] || error "KERN_MIN_VER has no value."
+	[ $(is_a_number $KERN_MAJ_VER) ] || error "KERN_MAJ VER not a number"
+	[ $(is_a_number $KERN_MIN_VER) ] || error "KERN_MIN_VER not a number"
+	
+	
+	# controlla presenza di modprobe
+	$ECHO -e "\n Looking for modprobe... \c"
+	
+	if [ -f /proc/sys/kernel/modprobe ] ; then
+	
+		MPROBE=$(cat /proc/sys/kernel/modprobe)
+	else
+		MPROBE=$(which modprobe 2> /dev/null)	
+	fi		
+	
+	
+	[ "$MPROBE" ] || error "modprobe: executable not found.\n" 
+	
+	
+	echo "ok"
+	
+	
+	# path dell'eseguibile iptables
+	$ECHO -e " Looking for iptables... \c"
+	
+	# se non l'ho gia' trovato con which tento l'ultima carta
+	if [ -z "$IPTB" ] ; then
+
+		if [ -x /usr/local/sbin/iptables ] ; then
+			IPTB=/usr/local/sbin/iptables
+		else	
+			error "iptables: executable not found\n" 
+		fi		
+	fi
+	
+	$ECHO -e "ok\n"
+	
+	
+	# controlla se netfilter e' stato compilato modulare
+	$ECHO -e " Modular netfilter... \c"
+	
+	
+	case "$KERN_MAJ_VER" in
+		2)	case "${KERN_MIN_VER}" in
+				4)	EXT="o" 
+					;;
+				*) error "Kernel minor version unknown."
+					;;
+			esac
+			;;
+		*)	EXT="ko" 
+			;;
+	esac
+	
+	
+	IPTM="/lib/modules/$(uname -r)/kernel/net/ipv4/netfilter/ip_tables.$EXT"
+	if [ -f $IPTM ]; then
+
+		/bin/echo -e "yes"
+		$MPROBE ip_tables
+		rcode_mgr "$MPROBE ip_tables failed."
+	else
+		$ECHO -e "no"	
+	fi		
+	
+	
+	# indica la presenza o meno del masquerading
+	$ECHO -e " Masquerading... \c"
+	
+	
+	FILE="/proc/net/ip_tables_names"
+	[ -f $FILE ] || error "$FILE not found."
+	
+	if [ $($GREP nat $FILE 2> /dev/null) ] ; then
+		MASQ="1"
+		$ECHO -e "present\n"
+	else
+		MASQ="0"
+		$ECHO -e "not present\n"
+	fi			
+	
+	
+	# resetta policies preesistenti e imposta la policy della INPUT chain 
+	# in DROP
+	$ECHO -e " Clear policies... \c"
+	
+	$IPTB -F
+	rcode_mgr "$IPTB -F failed."
+	
+	$IPTB -P INPUT DROP
+	rcode_mgr "$IPTB -P INPUT DROP failed."
+	
+	$IPTB -P OUTPUT ACCEPT
+	rcode_mgr "$IPTB -P OUTPUT ACCEPT failed."
+	
+	$IPTB -P FORWARD ACCEPT
+	rcode_mgr "$IPTB -P FORWARD ACCEPT failed."
+	
+	$ECHO -e "done\n"
+	
+	
+	
+	$ECHO -e " IPV6... \c"
+	if [ "$IPV6" = "yes" ]; then
+		$ECHO -e "enabled"
+	else
+		$ECHO -e "disabled"
+	fi
+
+
+
+	#######################
+	# impostazioni sysctl #
+	###############################################################
+	
+	$ECHO -e " Setting sysctl... \c"
+	
+	PROC_FILE="/proc/sys/net/ipv4/tcp_syncookies"
+	[ -f $PROC_FILE ] || error "$PROC_FILE not found."
+	echo "1" > $PROC_FILE
+	
+	PROC_FILE="/proc/sys/net/ipv4/tcp_retrans_collapse"
+	[ -f $PROC_FILE ] || error "$PROC_FILE not found."
+	echo "0" > $PROC_FILE
+	
+	PROC_FILE="/proc/sys/net/ipv4/conf/all/log_martians"
+	[ -f $PROC_FILE ] || error "$PROC_FILE not found."
+	echo "1" > $PROC_FILE
+	
+	PROC_FILE="/proc/sys/net/ipv4/icmp_echo_ignore_broadcasts"
+	[ -f $PROC_FILE ] || error "$PROC_FILE not found."
+	echo "1" > $PROC_FILE
+	
+	PROC_FILE="/proc/sys/net/ipv4/tcp_keepalive_time"
+	[ -f $PROC_FILE ] || error "$PROC_FILE not found."
+	echo 4000 > $PROC_FILE 
+	
+	PROC_FILE="/proc/sys/net/ipv4/tcp_fin_timeout"
+	[ -f $PROC_FILE ] || error "$PROC_FILE not found."
+	echo 30 > $PROC_FILE
+	
+	
+	typeset -i FOUND=0
+	for interface in /proc/sys/net/ipv4/conf/*/rp_filter; do
+		echo "1" > $interface
+		(( FOUND++ ))
+	done	
+	
+	[ $FOUND -eq 0 ] \
+		&& echo '/proc/sys/net/ipv4/conf/*/rp_filter not found' \
+								> /dev/stderr
+	
+	
+	if [ -f /proc/sys/net/ipv4/conf/all/accept_source_route ] ; then
+		for interface in /proc/sys/net/ipv4/conf/*/accept_source_route;
+		do
+			echo "0" > $interface
+		done
+	fi				
+	
+	
+	FILE="/proc/sys/net/ipv4/tcp_timestamps"
+	if [ $UPTIME = "no" -a -f $FILE ] ; then
+	
+		echo "0" > $FILE
+	elif [ -f $FILE ]; then
+
+		echo "1" > $FILE
+	fi
+	
+	
+	echo "done"
+	
+
+	
+	###############################################################
+	######## INPUT Chain ##########################################
+	###############################################################
+
+	LAN=$(ip r | awk '/^default/{print $5}' | egrep -v tun)
+	NMASK=$(ip r | egrep ${LAN} | egrep "src" | awk '{print $1}')
+
+
+	
+	$ECHO -e " Setting INPUT chain..."
+
+
+	# accetta ipv6
+	if [ "$IPV6" = "yes" ]; then
+	
+	        $IPTB -A INPUT -p 41 -j ACCEPT
+		rcode_mgr "$IPTB -A INPUT -p 41 -j ACCEPT failed"
+	fi
+	
+
+	# logga e blocca tutti i pacchetti INVALID	
+	$IPTB -A INPUT -p all -m state --state INVALID -j LOG \
+			--log-level 5 --log-prefix "INVALID_STATE "
+	rcode_mgr "$IPTB INPUT -p all -m state --state INVALID failed"
+
+	$IPTB -A INPUT -p all -m state --state INVALID -j DROP 
+	rcode_mgr "$IPTB INPUT -p all -m state --state INVALID -j DROP failed"
+
+	
+	# accetta qualsiasi cosa provenga da localhost
+	$IPTB -A INPUT -i lo -p all -m state --state NEW,ESTABLISHED,RELATED \
+								-j ACCEPT
+	rcode_mgr "$IPTB --state NEW,ESTABLISHED,RELATED failed."
+	
+	
+	
+	# accetta qualsiasia cosa da chi e' in WhiteList
+	$ECHO -e "\n\tWhitelist...\n"
+	
+	for WL_IP in $WL_ALL; do
+	
+		$ECHO -e "\t$WL_IP full access allowed"
+		$IPTB -A INPUT -p all -s $WL_IP -m state \
+				--state NEW,ESTABLISHED,RELATED -j ACCEPT
+		rcode_mgr "$IPTB --state NEW,ESTABLISHED,RELATED failed."
+	done
+	
+	
+	for number in $(seq $WL_NUM); do
+	
+		WLPROTO=$(eval echo \$WL_PORT${number}_PROTO)
+		[ "$WLPROTO" ] || break
+	
+		WLSRCPORT=$(eval echo \$WL_PORT${number}_SRC)
+		WLDSTPORT=$(eval echo \$WL_PORT${number}_DST)
+
+		if [ "$WLSRCPORT" ]; then
+
+			IPT_SRCPORT="--sport ${WLSRCPORT}"
+			PRNT_SRC_PORT="src port ${WLSRCPORT}"
+		fi
+
+
+		if [ "$WLDSTPORT" ]; then 
+
+			IPT_DSTPORT="--dport ${WLDSTPORT}"
+			PRNT_DST_PORT="dst port ${WLDSTPORT}"
+		fi
+
+	
+		for WLHOST in $(eval echo \$WL_PORT${number}_IPLIST); do
+	
+			$ECHO -e "\t$WLHOST $(echo ${WLPROTO} | tr a-z A-Z) ${PRNT_SRC_PORT} ${PRNT_DST_PORT} allowed"
+
+			$IPTB -A INPUT -p $WLPROTO -s $WLHOST \
+				${IPT_SRCPORT} ${IPT_DSTPORT} \
+				-m state --state NEW,ESTABLISHED,RELATED \
+				-j ACCEPT
+			rcode_mgr "$IPTB -p $WLPROTO -s $WLHOST failed."
+		done
+	done	
+
+	
+	# blocca qualsiasi cosa da chi e' in BlackList
+	$ECHO -e "\n\tBlacklist...\n"
+	
+	for BL_IP in $BL_ALL ; do
+	
+		$ECHO -e "\t$BL_IP full access denied"
+		$IPTB -A INPUT -p all -s $BL_IP -j DROP
+		rcode_mgr "$IPTB -A INPUT -p all -s $BL_IP -j DROP failed."
+	done
+	
+	for number in $(seq $BL_NUM); do
+	
+		BLPROTO=$(eval echo \$BL_PORT${number}_PROTO)
+		[ "$BLPROTO" ] || break
+	
+		BLPORT=$(eval echo \$BL_PORT${number})
+		[ "$BLPORT" ] || error "BLPORT has no value."
+	
+		for BLHOST in $(eval echo \$BL_PORT${number}_IPLIST); do
+	
+			$ECHO -e "\t$BLHOST port $BLPORT $BLPROTO denied"
+			$IPTB -A INPUT -p $BLPROTO -s $BLHOST --dport $BLPORT \
+								-j DROP
+			rcode_mgr "$IPTB INPUT -p $BLPROTO -s $BLHOST failed."
+		done
+	done	
+	
+	
+	
+	#### SCAN LOGGING #####################################################
+	
+	# Logga tentativi di XMAS SCAN
+	$IPTB -A INPUT -p tcp --tcp-flags ALL FIN,URG,PSH -m limit \
+		--limit 3/m --limit-burst 5 -j LOG --log-level 5 \
+						--log-prefix "XMAS_SCAN "
+	rcode_mgr "$IPTB -A INPUT -p tcp --tcp-flags ALL FIN,URG,PSH failed."
+	
+	$IPTB -A INPUT -p tcp --tcp-flags ALL FIN,URG,PSH -j DROP
+	rcode_mgr "$IPTB INPUT -p tcp --tcp-flags ALL FIN,URG,PSH DROP failed."
+	
+	
+	# Logga tentativi di FIN SCAN
+	$IPTB -A INPUT -p tcp --tcp-flags ALL FIN -m limit --limit 3/m \
+		--limit-burst 5 -j LOG --log-level 5 --log-prefix "FIN_SCAN "
+	rcode_mgr "$IPTB -A INPUT -p tcp --tcp-flags ALL FIN -m limit failed."
+	
+	$IPTB -A INPUT -p tcp --tcp-flags ALL FIN -j DROP
+	rcode_mgr "$IPTB INPUT -p tcp --tcp-flags ALL FIN DROP failed."
+	
+	
+	# Logga tentativi di NULL SCAN
+	$IPTB -A INPUT -p tcp --tcp-flags ALL NONE -m limit --limit 3/m \
+		--limit-burst 5 -j LOG --log-level 5 --log-prefix "NULL_SCAN "
+	rcode_mgr "$IPTB -A INPUT -p tcp --tcp-flags ALL NONE -m limit failed."
+	
+	$IPTB -A INPUT -p tcp --tcp-flags ALL NONE -j DROP
+	rcode_mgr "$IPTB INPUT -p tcp --tcp-flags ALL NONE DROP failed"
+
+	
+	# Stoppa pacchetti con flag tcp non corrette (scan nmap per esempio)
+	if [ $KERN_MAJ_VER -eq 2 -a $KERN_MIN_VER -eq "4" ] ; then
+	        $IPTB -A INPUT -p all -m unclean -j DROP
+		rcode_mgr "$IPTB -A INPUT -p all -m unclean -j DROP failed."
+	else
+		$IPTB -A INPUT -p tcp --tcp-flags ALL SYN,FIN -m limit \
+			--limit 3/m --limit-burst 5 -j LOG --log-level 5 \
+						--log-prefix "SYN_AND_FIN "
+		rcode_mgr "$IPTB INPUT -p tcp --tcp-flags ALL SYN,FIN failed."
+	
+		$IPTB -A INPUT -p tcp --tcp-flags ALL SYN,FIN -j DROP
+		rcode_mgr "$IPTB INPUT tcp --tcp-flags ALL SYN,FIN DROP failed"
+	
+		$IPTB -A INPUT -p tcp --tcp-flags ALL ALL -m limit \
+			--limit 3/m --limit-burst 5 -j LOG --log-level 5 \
+						--log-prefix "ALL_FLAG_SET "
+		$IPTB -A INPUT -p tcp --tcp-flags ALL ALL -j DROP
+		rcode_mgr "$IPTB INPUT -p tcp --tcp-flags ALL ALL  DROP failed"
+	fi
+	
+	
+	#### IMPOSTAZIONI ICMP ################################################
+	
+	# accetta ogni tipo di icmp dalle macchine della lan interna
+	$IPTB -A INPUT -i $LAN -p icmp -s $NMASK -j ACCEPT
+	rcode_mgr "$IPTB -A INPUT -i $LAN -p icmp -s $NMASK -j ACCEPT failed"
+	
+	
+	# logga gli ICMP echo-request (ping) 
+	$IPTB -A INPUT -p icmp --icmp-type echo-request -m limit \
+		--limit 3/minute --limit-burst 1 -j LOG --log-level 5 \
+		--log-prefix "PING BLOCKED: "
+	rcode_mgr "$IPTB -A INPUT -p icmp --icmp-type echo-request failed"
+	
+	
+	# accetta i pacchetti ICMP provenienti da internet tranne i ping e timestamp
+	$IPTB -A INPUT -p icmp --icmp-type timestamp-request -j DROP
+	rcode_mgr "$IPTB INPUT icmp --icmp-type timestamp-request DROP failed"
+
+	$IPTB -A INPUT -p icmp ! --icmp-type echo-request -j ACCEPT
+	rcode_mgr "$IPTB INPUT -p icmp ! --icmp-type echo-request ACCEPT failed"
+	
+	
+	
+	#### IMPOSTAZIONI PORTE TCP e UDP #####################################
+	
+	# accetta pacchetti relativi a connessioni attive
+	$IPTB -A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
+	rcode_mgr "$IPTB INPUT state --state RELATED,ESTABLISHED ACCEPT failed"
+	
+
+	if [[ "${MULTICAST}" = "yes" ]]; then
+
+		${IPTB} -A INPUT -m pkttype --pkt-type multicast -s $NMASK -j ACCEPT
+		rcode_mgr "$IPTB  -m pkttype --pkt-type multicast failed."
+	fi
+
+	
+	if [[ "${CHROMECAST}" = "yes" ]]; then
+
+		PORT_RANGE=$(sysctl -n net.ipv4.ip_local_port_range | sed -e 's/\t/:/g')
+
+		${IPTB} -A INPUT -p udp -m udp --dport ${PORT_RANGE} -s $NMASK -j ACCEPT
+		rcode_mgr "$IPTB -p udp  -m udp --dport 32768:60999 failed."
+	fi
+	
+
+	# segnala immediatamente la chiusura della porta 113 (identd)
+	# velocizzando le autenticazioni 
+	$IPTB -A INPUT -p tcp --dport 113 -j REJECT --reject-with tcp-reset	
+	rcode_mgr "$IPTB --dport 113 -j REJECT --reject-with tcp-reset failed"
+	
+	
+	# porte TCP accessibili solo da localhost
+	for PORT in $TCP_ONLY_FROM_LOCALHOST; do
+
+		$IPTB -A INPUT ! -i lo -p tcp --dport $PORT -j DROP	
+		rcode_mgr "$IPTB INPUT ! -i lo -p tcp --dport $PORT DROP failed"
+	done
+	
+	
+	# porte UDP accessibili solo da localhost
+	for PORT in $UDP_ONLY_FROM_LOCALHOST; do
+
+		$IPTB -A INPUT ! -i lo -p udp --dport $PORT -j DROP
+		rcode_mgr "$IPTB INPUT ! -i lo -p udp --dport $PORT DROP failed"
+	done		
+	
+	
+	# porte TCP accessibili solo dalle macchine della lan
+	for PORT in $TCP_ONLY_FROM_LAN; do
+	
+		$IPTB -A INPUT -p tcp -s $NMASK --dport $PORT -m state \
+				--state NEW,ESTABLISHED,RELATED -j ACCEPT	
+		rcode_mgr "$IPTB -A INPUT -p tcp -s $NMASK --dport $PORT failed"
+	
+		$IPTB -A INPUT -p tcp ! -s $NMASK --dport $PORT -j DROP
+		rcode_mgr "$IPTB INPUT ! -s $NMASK --dport $PORT -j DROP failed"
+	done
+	
+	
+	# porte UDP accessibili solo dalle macchine della lan
+	for PORT in $UDP_ONLY_FROM_LAN; do
+	
+		$IPTB -A INPUT -p udp -s $NMASK --dport $PORT -m state \
+				--state NEW,ESTABLISHED,RELATED -j ACCEPT	
+		rcode_mgr "$IPTB -A INPUT -p udp -s $NMASK --dport $PORT failed"
+	
+		$IPTB -A INPUT -p udp ! -s $NMASK --dport $PORT -j DROP
+		rcode_mgr "$IPTB INPUT -p udp ! -s $NMASK --dport $PORT failed"
+	done	
+	
+	
+	# porte TCP accessibili da chiunque
+	for PORT in $TCP_OPEN_TO_WORLD; do
+	
+		$IPTB -A INPUT -p tcp --dport $PORT -m state \
+				--state NEW,ESTABLISHED,RELATED -j ACCEPT	
+		rcode_mgr "$IPTB -A INPUT -p tcp --dport $PORT -m state  failed"
+	done	
+	
+	
+	# porte UDP accessibili da chiunque
+	for PORT in $UDP_OPEN_TO_WORLD; do
+	
+		$IPTB -A INPUT -p udp --dport $PORT -m state \
+				--state NEW,ESTABLISHED,RELATED -j ACCEPT
+		rcode_mgr "$IPTB -A INPUT -p udp --dport $PORT -m state failed"
+	done	
+			
+	
+	
+	# logga i tentativi di connessione a porte non aperte
+	$IPTB -A INPUT -p tcp --tcp-flags ALL FIN -j LOG \
+		--log-level 5 --log-prefix "FIN BLOCKED "
+	rcode_mgr "$IPTB -A INPUT -p tcp --tcp-flags ALL FIN -j LOG failed"
+	
+	$IPTB -A INPUT -p tcp --syn -j LOG --log-level 5 \
+		--log-prefix "BLOCKED "
+	rcode_mgr "$IPTB -A INPUT -p tcp --syn -j LOG --log-level 5 failed"
+	
+	
+	
+	# Droppa tutti i pacchetti SYN diretti a porte non aperte
+	#if [ $GRSEC = "yes" ]; then
+	
+	#	$IPTB -A INPUT -p tcp --syn ! -s $NMASK -m stealth -j DROP
+	#	rcode_mgr "$IPTB -A INPUT --syn ! -s $NMASK -m stealth failed"
+	
+	#	$IPTB -A INPUT -p udp ! -s $NMASK -m stealth -j DROP
+	#	rcode_mgr "$IPTB -A INPUT -p udp ! -s $NMASK -m stealth failed"
+	#fi		
+	
+	
+	echo " done"
+	
+	
+	
+	#######################################################################
+	######## OUTPUT Chain #################################################
+	#######################################################################
+	
+	$ECHO -e " Setting OUTPUT chain... \c"
+	
+	# accetta ipv6
+	if [ $IPV6 != "yes" ]; then
+
+	        $IPTB -A OUTPUT -p 41 -j DROP
+		rcode_mgr "$IPTB -A OUTPUT -p 41 -j DROP failed"
+	fi
+	
+	# blocca risposte a ICMP timestamp in uscita
+	$IPTB -A OUTPUT -p icmp --icmp-type 14 -j DROP
+	rcode_mgr "$IPTB -A OUTPUT -p icmp --icmp-type 14 -j DROP failed"
+	
+	echo "done"
+	
+	
+	#######################################################################
+	######## FORWARD Chain ################################################
+	#######################################################################
+	
+	$ECHO -e " Setting FORWARD chain... \c"
+
+
+	# accetta ipv6
+	if [ $IPV6 != "yes" ]; then
+
+	        $IPTB -A FORWARD -p 41 -j DROP
+		rcode_mgr "$IPTB -A FORWARD -p 41 -j DROP failed"
+	fi
+	
+	# blocca il forwarding dei pacchetti sulla stessa interfaccia
+	$IPTB -A FORWARD -i $LAN -o $LAN -j REJECT
+	rcode_mgr "$IPTB -A FORWARD -i $LAN -o $LAN -j REJECT failed"
+	
+	
+	# logga tutti i pacchetti INVALID	
+	$IPTB -A FORWARD -p all -m state --state INVALID -j LOG \
+			--log-level 5 --log-prefix "INVALID_STATE "
+	rcode_mgr "$IPTB INPUT -p all -m state --state INVALID failed"
+
+	# blocca il forwarding di pacchetti con flag tcp non corrette
+	$IPTB -A FORWARD -m state --state INVALID -j DROP
+	rcode_mgr "$IPTB -A FORWARD -m state --state INVALID -j DROP failed"
+	
+	
+	echo "done"
+
+	
+	#######################################################################
+	######## NAT PREROUTING Chain #########################################
+	#######################################################################
+	
+	if [ $MASQ -eq 1 ] ; then
+	
+		PRINT_NL=0
+		for host in $(seq $NUM_HOST); do
+	
+			if [ $(eval echo \$IP${host}) ] ; then
+				PRINT_NL=1
+			fi
+		done
+	
+		if [ $PRINT_NL -eq 1 ] ; then
+			$ECHO -e "\n"
+			echo " FORWADING LIST:"
+		fi
+	
+		# determina l'ip pubblico
+		PUBLIC_IP=$($IP r get $(ip r | $AWK '/^default/{print $3}') | $AWK '/src/{print $NF}')
+		rcode_mgr "ip r get (ip r | awk '/^default/{print $3}') | awk '/src/{print $NF}' failed"
+	
+	
+		# forwarda le porte verso altri host
+		for host in $(seq $NUM_HOST); do
+			if [ $(eval echo \$IP${host}) ] ; then
+				for port in $(eval echo \$$(eval echo PORTS_TO_IP${host})); do
+					PSEP=":"
+					if [ $(echo $port \
+						| $GREP -e '\d*to\d*') ]; then
+
+						DST_PORT=$(echo $port \
+							| $SED -e 's/.*to//')
+						SRC_PORT=$(echo $port \
+							| $SED -e 's/to.*//')
+	
+					# se è una lista di porte separata da :	
+					elif [ $(echo $port \
+						| $GREP -e '\d*:\d*') ]; then
+
+						SRC_PORT=$port
+						PSEP=""
+						DST_PORT=""
+					else
+						DST_PORT=$port
+						SRC_PORT=$port
+					fi
+	
+					if [ "$(eval echo \$PROTO${host})" = "udp" ]; then
+						FW_PROTO="udp"
+					else
+						FW_PROTO="tcp"
+					fi
+	
+					if [ -z "$PUBLIC_IP" ] ; then
+						eval $IPTB -t nat -A PREROUTING \
+							! -i $LAN -p $FW_PROTO \
+							--dport $SRC_PORT \
+							-j DNAT \
+							--to \$IP${host}${PSEP}$DST_PORT
+						rcode_mgr "$IPTB -t nat -A PREROUTING."
+					else
+						eval $IPTB -t nat -A PREROUTING \
+							-p $FW_PROTO \
+							-d $PUBLIC_IP \
+							--dport $SRC_PORT \
+							-j DNAT \
+							--to \$IP${host}${PSEP}$DST_PORT
+						rcode_mgr "$IPTB -t nat -A PREROUTING."
+					fi			
+	
+					eval $ECHO -e \
+					"' 'Port ${SRC_PORT}\\\tPROTO $FW_PROTO to " \
+					"'--->' \$IP${host}${PSEP}${DST_PORT}"
+				done
+				$ECHO -e "\n"
+			fi
+		done	
+		$ECHO -e " Setting NAT PREROUTING chain... \c"
+		echo done
+	fi				
+	#######################################################################
+	######## END ##########################################################
+	#######################################################################
+	
+	echo `date +'%b %d %T'` freedWALL $VERSION loaded. >> /var/log/messages
+	$ECHO -e "\n\n freedWALL $VERSION loaded.\n"
+	
+	;;   
+	
+	
+	
+stop)
+	### trova eseguibili ##################################################
+	
+	# trova iptables se which fallisce
+	if [ -z "$IPTB" ]; then
+	
+		if [ -f /usr/local/sbin/iptables ]; then
+			IPTB="/usr/local/sbin/iptables"
+		else
+			error "iptables: executable not found\n" 
+		fi		
+	fi
+	
+	
+	# trova modprobe
+	if [ -f /proc/sys/kernel/modprobe ]; then
+			MPROBE=$(cat /proc/sys/kernel/modprobe)
+		else
+			MPROBE=$(which modprobe 2> /dev/null)
+	fi			
+	
+	[ "$MPROBE" ] || error "modprobe: executable not found\n"
+	
+			
+	
+	### reset delle policies ##############################################
+	
+	$ECHO -e "\n Reset policies... \c"
+	$ECHO -e "done\n"
+
+	if [ "$($GREP nat /proc/net/ip_tables_names 2> /dev/null)" ]; then
+		$IPTB -t nat -F PREROUTING
+		rcode_mgr "$IPTB -t nat -F PREROUTING failed."
+	fi		
+	
+	
+	$IPTB -F
+	rcode_mgr "$IPTB -F failed."
+	
+	$IPTB -P INPUT ACCEPT
+	rcode_mgr "$IPTB -P INPUT ACCEPT failed."
+	
+	$IPTB -P FORWARD ACCEPT
+	rcode_mgr "$IPTB -P FORWARD ACCEPT failed."
+	
+	$IPTB -P OUTPUT ACCEPT
+	rcode_mgr "$IPTB $IPTB -P OUTPUT ACCEPT failed."
+	
+	
+	
+	### unload dei moduli #################################################
+	
+	MODULES="ipt_MASQUERADE \
+		iptable_nat	\
+		nf_nat	\
+		ipt_state \
+		xt_pkttype \
+		ipt_conntrack \
+		ipt_limit \
+		ipt_LOG \
+		ipt_unclean \
+		ipt_REJECT \
+		iptable_filter \
+		ipt_stealth \
+		ip_tables"
+	
+	for f in $MODULES; do
+	
+		if [ "$($LSMOD 2> /dev/null | $AWK /$f/'{print $1}' \
+							| $TAIL -n 1)" ]; then
+			$ECHO -e " Unload $f... \c"
+			$MPROBE -r $f
+			rcode_mgr "$MPROBE -r $f failed."
+	
+			echo "done"
+		fi
+	done	
+	
+	########################################################################
+	
+	echo `date +'%b %d %T'` freedWALL $VERSION unloaded. >>/var/log/messages
+	$ECHO -e "\n freedWALL $VERSION unloaded.\n"
+	
+	;;
+	
+reload)
+	echo "reloading freedwall... "
+
+	$0 stop
+	rcode_mgr "$0 stop failed."
+
+	$0 start
+	rcode_mgr "$0 start failed."
+
+	;;
+
+*)
+	echo "Usage: $(basename $0) {start|stop|reload}"
+	exit 1
+
+	;;	
+
+esac
+
+
+exit 0

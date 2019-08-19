@@ -1,0 +1,55 @@
+#############################################################################
+#  WARNING							 	    #
+#									    #
+#  Configure freedwall.conf before doing "make install"			    #
+#									    #
+#############################################################################
+
+REQUISITI:
+Following options must be enabled in the kernel:
+
+[kernel 2.4]
+NETWORKING OPTIONS ->
+	IP: NETFILTER CONFIGURATION ->
+		[*] Connection tracking
+		[*] IP tables support
+		[*] limit match support
+		[*] stealth match support (solo con grsecurity)
+		[*] Connection state match support
+		[*] Unclean match support
+		[*] Packet filtering
+		[*] REJECT tartget support
+		[*] LOG target support
+
+[kernel 2.6]
+DEVICE DRIVERS ->
+	NETWORKING SUPPORT ->
+		NETWORKING OPTIONS ->
+			NETWORK PACKET FILTERING ->
+				IP:NETFILTER CONFIGURATION
+					[*] Connection tracking
+					[*] IP tables support
+					[*] limit match support
+					[*] stealth match support (solo grsec)
+					[*] Connection state match support
+					[*] Packet filtering
+					[*] REJECT tartget support
+					[*] LOG target support
+
+
+
+INSTALL:
+- edit freedwall.conf
+- type "make install" and press return
+
+USAGE:
+- to load firewall: "/etc/init.d/freedwall start"
+- to stop firewall: "/etc/init.d/freedwall stop"
+- to reload firewall: "/etc/init.d/freedwall reload"
+
+
+That's all folks.
+
+
+Gabriele Pigozzo
+(gabriele.pigozzo@gmail.com)
