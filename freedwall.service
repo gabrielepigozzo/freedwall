@@ -1,6 +1,6 @@
 [Unit]
 Description=iptables rules generator
-After=NetworkManager-wait-online.service
+After=NetworkManager-wait-online.service NetworkManager.service networkd-dispatcher.service
 
 [Service]
 #EnvironmentFile=/etc/freedwall.conf
@@ -15,3 +15,4 @@ RemainAfterExit=yes
 [Install]
 WantedBy=multi-user.target
 Alias=freedwall.service
+Wants=NetworkManager-wait-online.service
