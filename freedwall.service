@@ -1,6 +1,6 @@
 [Unit]
 Description=iptables rules generator
-After=NetworkManager-wait-online.service NetworkManager.service networkd-dispatcher.service
+After=NetworkManager-wait-online.service NetworkManager.service networkd-dispatcher.service network.target network-online.target systemd-networkd.service connman.service remote-fs.target
 
 [Service]
 #EnvironmentFile=/etc/freedwall.conf
