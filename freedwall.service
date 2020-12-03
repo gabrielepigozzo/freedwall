@@ -1,7 +1,8 @@
 [Unit]
 Description=iptables rules generator
-After=network-online.target
-Wants=network-online.target
+Wants=network.target network-online.target
+After=network.target network-online.target
+
 
 [Service]
 #EnvironmentFile=/etc/freedwall.conf
