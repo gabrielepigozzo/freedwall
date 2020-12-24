@@ -299,6 +299,10 @@ start)
 	######## INPUT Chain ##########################################
 	###############################################################
 
+	until ip r | grep -qw default; do
+
+		sleep 1
+	done
 	LAN=$(ip r | awk '/^default/{print $5}' | egrep -v tun)
 	NMASK=$(ip r | egrep ${LAN} | egrep "src" | awk '{print $1}')
 
@@ -836,8 +840,11 @@ reload)
 
 	;;
 
+status)
+	$IPTB -L -n -v
+	;;
 *)
-	echo "Usage: $(basename $0) {start|stop|reload}"
+	echo "Usage: $(basename $0) {start|stop|reload|status}"
 	exit 1
 
 	;;	
