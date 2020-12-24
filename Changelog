@@ -1,3 +1,7 @@
+v3.5.1  # 24/12/2020
+- new: status function
+- fix: wait until a default gw is set
+
 v3.5.0
 - new: automagically determine default network interface
 - new: multicast support
