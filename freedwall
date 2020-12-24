@@ -1,6 +1,6 @@
 #!/bin/bash
 #set -e
-VERSION="3.5.0"
+VERSION="3.5.1"
 
 ### BEGIN INIT INFO
 # Provides:        freedwall
