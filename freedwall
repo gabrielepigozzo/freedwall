@@ -306,7 +306,7 @@ start)
 	done
 
 	LAN=$(ip r | awk '/^default/{print $5}' | egrep -v tun)
-	NMASK=$(ip r | egrep ${LAN} | egrep "src" | awk '{print $1}')
+	NMASK=$(ip r | egrep ${LAN} | egrep "kernel" | awk '{print $1}')
 
 
 	
