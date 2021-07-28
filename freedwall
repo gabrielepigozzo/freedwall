@@ -510,6 +510,26 @@ start)
 	fi
 	
 
+	if [[ "${SPOTIFY}" = "yes" ]]; then
+
+		${IPTB} -A INPUT -p udp -m udp --sport 1900 -s $NMASK -j ACCEPT
+		rcode_mgr "$IPTB -p udp  -m udp --sport 1900 -s $NMASK failed."
+
+		${IPTB} -A INPUT -p udp -m udp --dport 1900 -s $NMASK -j ACCEPT
+		rcode_mgr "$IPTB -p udp  -m udp --dport 1900 -s $NMASK failed."
+
+		${IPTB} -A INPUT -p udp -m udp --dport 57621 -s $NMASK -j ACCEPT
+		rcode_mgr "$IPTB -p udp  -m udp --dport 57621 -s $NMASK failed."
+	fi
+
+
+	if [[ "${MDNS}" = "yes" ]]; then
+
+		${IPTB} -A INPUT -p udp -m udp --dport 5353 -s $NMASK -j ACCEPT
+		rcode_mgr "$IPTB -p udp  -m udp --dport 5353 -s $NMASK failed."
+	fi
+
+
 	# segnala immediatamente la chiusura della porta 113 (identd)
 	# velocizzando le autenticazioni 
 	$IPTB -A INPUT -p tcp --dport 113 -j REJECT --reject-with tcp-reset	
@@ -584,6 +604,9 @@ start)
 		--log-prefix "BLOCKED "
 	rcode_mgr "$IPTB -A INPUT -p tcp --syn -j LOG --log-level 5 failed"
 	
+	$IPTB -A INPUT -p udp -m udp -j LOG --log-level 5 \
+		--log-prefix "BLOCKED "
+	rcode_mgr "$IPTB -A INPUT -p udp -m udp -j LOG --log-level 5 failed"
 	
 	
 	# Droppa tutti i pacchetti SYN diretti a porte non aperte
