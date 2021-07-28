@@ -1,3 +1,8 @@
+v3.6.0	# 28/07/2021
+- new: enable Spotify to identify audio devices on the network
+- new: mDNS support
+- new: log all dropped UDP packets
+
 v3.5.1  # 24/12/2020
 - new: status function
 - fix: wait until a default gw is set
