@@ -40,9 +40,16 @@ DEVICE DRIVERS ->
 
 INSTALL:
 - edit freedwall.conf
-- type "make install" and press return
+- type "make install"
+
 
 USAGE:
+for systemD:
+- to load firewall: "systemctl start freedwall.service"
+- to stop firewall: "systemctl stop freedwall.service"
+- to reload firewall: "systemctl restart freedwall.service"
+
+for system-V:
 - to load firewall: "/etc/init.d/freedwall start"
 - to stop firewall: "/etc/init.d/freedwall stop"
 - to reload firewall: "/etc/init.d/freedwall reload"
