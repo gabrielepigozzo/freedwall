@@ -7,6 +7,7 @@ FREEDWALL is just this: an iptables rules generator meant to be easy to configur
 # Features: 								    #
 #############################################################################
 
+    * systemD compliant start/stop method
     * System V compliant start/stop method
     * 3 configuration zones: LOCALHOST, LOCALNET, WORLD
     * protection against Xmas, Null & FIN Scan
@@ -20,6 +21,8 @@ FREEDWALL is just this: an iptables rules generator meant to be easy to configur
     * load/unload iptables modules
     * GRSEC patch support
     * White/Black lists
+    * native support for Spotify, Chromecast, mDNS and multicast protocols
+
 
 #############################################################################
 
