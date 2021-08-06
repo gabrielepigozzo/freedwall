@@ -1,6 +1,6 @@
 #!/bin/bash
 #set -e
-VERSION="3.6.0"
+VERSION="3.5.1"
 
 ### BEGIN INIT INFO
 # Provides:        freedwall
@@ -513,13 +513,16 @@ start)
 	if [[ "${SPOTIFY}" = "yes" ]]; then
 
 		${IPTB} -A INPUT -p udp -m udp --sport 1900 -s $NMASK -j ACCEPT
-		rcode_mgr "$IPTB -p udp  -m udp --sport 1900 -s $NMASK failed."
+		rcode_mgr "$IPTB -p udp -m udp --sport 1900 -s $NMASK failed."
 
 		${IPTB} -A INPUT -p udp -m udp --dport 1900 -s $NMASK -j ACCEPT
-		rcode_mgr "$IPTB -p udp  -m udp --dport 1900 -s $NMASK failed."
+		rcode_mgr "$IPTB -p udp -m udp --dport 1900 -s $NMASK failed."
 
 		${IPTB} -A INPUT -p udp -m udp --dport 57621 -s $NMASK -j ACCEPT
-		rcode_mgr "$IPTB -p udp  -m udp --dport 57621 -s $NMASK failed."
+		rcode_mgr "$IPTB -p udp -m udp --dport 57621 -s $NMASK failed."
+
+		${IPTB} -A INPUT -p tcp -m tcp --dport 57621 -s $NMASK -j ACCEPT
+		rcode_mgr "$IPTB -p tcp -m tcp --dport 57621 -s $NMASK failed."
 	fi
 
 
