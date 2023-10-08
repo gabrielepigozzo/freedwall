@@ -1,4 +1,5 @@
 PROG = freedwall
+RSYSLOG = 20-freedwall.conf
 DEFRL = $(shell grep initdefault /etc/inittab | cut -d : -f 2)
 DEBIAN = $(shell which update-rc.d)
 SYSTEMD = $(shell which systemctl)
@@ -9,7 +10,10 @@ install:
 ifdef SYSTEMD
 	cp $(PROG) /usr/sbin
 	chmod +x /usr/sbin//$(PROG)
+	cp $(RSYSLOG) /etc/rsyslog.d
 	cp $(PROG).service /etc/systemd/system
+	systemctl daemon-reload
+	systemctl restart rsyslog.service
 	systectl enable $(PROG).service
 else
 	cp $(PROG) /etc/init.d
@@ -30,7 +34,10 @@ uninstall:
 ifdef SYSTEMD
 	systemctl disable --now $(PROG).service
 	rm -f /usr/sbin//$(PROG)
+	rm -f /etc/rsyslog.d/$(RSYSLOG)
 	rm -f /etc/systemd/system/$(PROG).service
+	systemctl daemon-reload
+	systemctl restart rsyslog.service
 else
 	/etc/init.d/$(PROG) stop
 	rm -f /etc/init.d/$(PROG)
