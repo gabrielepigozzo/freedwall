@@ -6,6 +6,8 @@ v3.7.0	# 28/10/2023
 - new: ACK,FIN FIN scan blocked
 - new: ACK,PSH PSH scan blocked
 - new: ACK,URG URG scan blocked
+- fix: print "done" only after the chain policies reset
+- del: kernel modules unload because it's useless
 
 v3.6.0	# 28/07/2021
 - new: enable Spotify to identify audio devices on the network
