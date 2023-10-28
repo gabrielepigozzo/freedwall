@@ -865,7 +865,7 @@ stop)
 	
 	### reset delle policies ##############################################
 	
-	$ECHO -e "\n Reset policies... \c"
+	$ECHO -e "\n Reset CHAIN policies... \c"
 
 	if [ "$($GREP nat /proc/net/ip_tables_names 2> /dev/null)" ]; then
 		$IPTB -t nat -F PREROUTING
