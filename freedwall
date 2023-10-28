@@ -866,7 +866,6 @@ stop)
 	### reset delle policies ##############################################
 	
 	$ECHO -e "\n Reset policies... \c"
-	$ECHO -e "done\n"
 
 	if [ "$($GREP nat /proc/net/ip_tables_names 2> /dev/null)" ]; then
 		$IPTB -t nat -F PREROUTING
@@ -874,47 +873,18 @@ stop)
 	fi		
 	
 	
-	$IPTB -F
-	rcode_mgr "$IPTB -F failed."
+	for CHAIN in INPUT OUTPUT FORWARD; do
+
+		iptables -P ${CHAIN} ACCEPT
+		rcode_mgr "$IPTB -P ${CHAIN} ACCEPT failed."
+
+		iptables -F ${CHAIN}
+		rcode_mgr "$IPTB -F ${CHAIN} failed."
+	done
+
+	$ECHO -e "done\n"
 	
-	$IPTB -P INPUT ACCEPT
-	rcode_mgr "$IPTB -P INPUT ACCEPT failed."
-	
-	$IPTB -P FORWARD ACCEPT
-	rcode_mgr "$IPTB -P FORWARD ACCEPT failed."
-	
-	$IPTB -P OUTPUT ACCEPT
-	rcode_mgr "$IPTB $IPTB -P OUTPUT ACCEPT failed."
-	
-	
-	
-	### unload dei moduli #################################################
-	
-	MODULES="ipt_MASQUERADE \
-		iptable_nat	\
-		nf_nat	\
-		ipt_state \
-		xt_pkttype \
-		ipt_conntrack \
-		ipt_limit \
-		ipt_LOG \
-		ipt_unclean \
-		ipt_REJECT \
-		iptable_filter \
-		ipt_stealth \
-		ip_tables"
-	
-	for f in $MODULES; do
-	
-		if [ "$($LSMOD 2> /dev/null | $AWK /$f/'{print $1}' \
-							| $TAIL -n 1)" ]; then
-			$ECHO -e " Unload $f... \c"
-			$MPROBE -r $f
-			rcode_mgr "$MPROBE -r $f failed."
-	
-			echo "done"
-		fi
-	done	
+
 	
 	########################################################################
 	
