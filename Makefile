@@ -24,6 +24,7 @@ ifdef DEBIAN
 else
         ln -s /etc/init.d/$(PROG) /etc/rc$(DEFRL).d/
 endif
+	cp $(PROG).logrotate /etc/logrotate.d/
 	cp $(PROG).conf /etc
 	mkdir -p /usr/share/doc/$(PROG)
 	cp COPYING CREDITS INSTALL README /usr/share/doc/$(PROG)
@@ -49,3 +50,4 @@ else
 endif
 	rm -f /etc/$(PROG).conf
 	rm -rf /usr/share/doc/$(PROG)
+	rm -f /etc/logrotate.d/$(PROG)
