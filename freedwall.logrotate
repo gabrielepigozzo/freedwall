@@ -1,0 +1,7 @@
+/var/log/freedwall.log {
+	notifempty
+	rotate 4
+	weekly
+	compress
+	missingok
+}
